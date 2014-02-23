@@ -363,7 +363,12 @@ void LogMouseOverInteractiveTile(INT16 const sGridNo)
 
 static LEVELNODE* InternalGetCurInteractiveTile(const BOOLEAN fRejectItemsOnTop)
 {
+#if defined(__APPLE__) || defined(__LINUX__)
+  if (_KeyDown(SDLK_CAPSLOCK)) return NULL;
+#else
 	if (_KeyDown(SHIFT)) return NULL;
+#endif
+
 	if (!gfOverIntTile)  return NULL;
 
 	LEVELNODE* n = gpWorldLevelData[gCurIntTile.sGridNo].pStructHead;
