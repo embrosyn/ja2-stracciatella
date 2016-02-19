@@ -1,17 +1,20 @@
 language: cpp
-
 compiler:
   - gcc
 
+os:
+  - linux
+  - osx
+
 before_install:
-  - sudo apt-get update -qq
-  - sudo apt-get install make g++ libsdl1.2-dev -y
+  -  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
+  -  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install sdl; fi
+  -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get update; fi
+  -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y make g++ libsdl1.2-dev; fi
 
 script: make SKIP_BUILD_NUMBER_CALC=1 clean && make SKIP_BUILD_NUMBER_CALC=1 all && ./ja2 -unittests
 
 notifications:
-  recipients:
-    - gennady.trafimenkov@gmail.com
   email:
     on_success: change
     on_failure: always
