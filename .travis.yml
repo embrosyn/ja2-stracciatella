@@ -7,12 +7,12 @@ os:
   - osx
 
 before_install:
-  -  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
-  -  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install sdl; fi
   -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get update; fi
   -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y make g++ libsdl1.2-dev; fi
 
-script: make SKIP_BUILD_NUMBER_CALC=1 clean && make SKIP_BUILD_NUMBER_CALC=1 all && ./ja2 -unittests
+script:
+  -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make SKIP_BUILD_NUMBER_CALC=1 clean && make SKIP_BUILD_NUMBER_CALC=1 all && ./ja2 -unittests; fi
+  -  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then make SKIP_BUILD_NUMBER_CALC=1 clean && make SKIP_BUILD_NUMBER_CALC=1 build-on-mac && ./ja2 -unittests; fi
 
 notifications:
   email:
