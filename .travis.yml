@@ -6,13 +6,22 @@ os:
   - linux
   - osx
 
+env:
+  - BUILD_RELEASES=true
+  - BUILD_RELEASES=false
+
 before_install:
   -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get update; fi
-  -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y make g++ libsdl1.2-dev; fi
-
+  -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y make gcc g++ libsdl1.2-dev; fi
+  -  if [[ "$BUILD_RELEASES" == "true" && "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y gcc-multilib g++-multilib pbuilder debhelper zip; fi
+  -  if [[ "$BUILD_RELEASES" == "true" && "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y virtualbox; fi
 script:
-  -  if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make SKIP_BUILD_NUMBER_CALC=1 clean && make SKIP_BUILD_NUMBER_CALC=1 all && ./ja2 -unittests; fi
-  -  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then make SKIP_BUILD_NUMBER_CALC=1 clean && make SKIP_BUILD_NUMBER_CALC=1 build-on-mac && ./ja2 -unittests; fi
+  -  if [[ $BUILD_RELEASES != "true" && "$TRAVIS_OS_NAME" == "linux" ]]; then make SKIP_BUILD_NUMBER_CALC=1 all && ./ja2 -unittests; fi
+  -  if [[ $BUILD_RELEASES == "true" && "$TRAVIS_OS_NAME" == "linux" ]]; then make build-debian-package; fi
+  -  if [[ $BUILD_RELEASES == "true" && "$TRAVIS_OS_NAME" == "linux" ]]; then make clean; fi
+  -  if [[ $BUILD_RELEASES == "true" && "$TRAVIS_OS_NAME" == "linux" ]]; then make build-win-release-on-linux; fi
+  -  if [[ $BUILD_RELEASES != "true" && "$TRAVIS_OS_NAME" == "osx" ]]; then make SKIP_BUILD_NUMBER_CALC=1 build-on-mac && ./ja2 -unittests; fi
+  -  if [[ $BUILD_RELEASES == "true" && "$TRAVIS_OS_NAME" == "osx" ]]; then make build-release-on-mac; fi
 
 notifications:
   email:
