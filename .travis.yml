@@ -12,11 +12,10 @@ compiler:
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install cmake make g++ libsdl1.2-dev -y
-  - sudo apt-get install libboost-all-dev -y
 
 script:
   - mkdir ci-build && cd ci-build
-  - cmake .. && make
+  - cmake -DLOCAL_BOOST_LIB=ON .. && make
   - ./ja2 -unittests
 
 addons:
