@@ -42,6 +42,7 @@ option(WITH_MAEMO "Build with right click mapped to F4 (menu button)" OFF)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "")
 set(CFLAGS "${CFLAGS} -DJA2 -DGAME_VERSION=\\\"${GAME_VERSION}\\\" -DMICROINI_STATIC")
+set(DEPENDENCIES "")
 
 if (EXTRA_DATA_DIR STREQUAL "")
     set(CFLAGS "${CFLAGS} -DEXTRA_DATA_DIR=\\\"\\\"")
@@ -75,10 +76,13 @@ if (NOT LOCAL_BOOST_LIB)
     find_package(Boost REQUIRED COMPONENTS filesystem system)
 else()
     message(STATUS "Compiling with local Boost libraries from ${CMAKE_CURRENT_SOURCE_DIR}/_build/lib-boost" )
-    add_subdirectory("_build/lib-boost")
-    set(Boost_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/_build/lib-boost")
-    set(Boost_LIBRARIES "boost")
+    set(DEPENDENCIES ${DEPENDENCIES} boost-internal)
+    set(Boost_LIBRARIES ${CMAKE_BINARY_DIR}/deps/lib/libboost_filesystem.a ${CMAKE_BINARY_DIR}/deps/lib/libboost_system.a)
 endif()
+
+set(DEPENDENCIES_INSTALL_DIR ${CMAKE_BINARY_DIR}/deps)
+set(DEPENDENCIES_INCLUDE_DIR ${DEPENDENCIES_INSTALL_DIR}/include)
+add_subdirectory("_build/dependencies")
 
 set(JA2_INCLUDES "")
 set(JA2_SOURCES "")
@@ -97,6 +101,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/_build/lib-slog
     ${CMAKE_CURRENT_SOURCE_DIR}/_build/lib-smacker/libsmacker
     ${CMAKE_CURRENT_SOURCE_DIR}/_build/lib-utf8cpp/source
+    ${DEPENDENCIES_INCLUDE_DIR}
     ${SDL_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
 )
@@ -123,6 +128,9 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS}")
 add_executable(${BINARY} ${JA2_SOURCES})
+if (DEPENDENCIES)
+    add_dependencies(${BINARY} ${DEPENDENCIES})
+endif()
 target_link_libraries(${BINARY} ${SDL_LIBRARY} ${Boost_LIBRARIES} ${lib-gtest} MicroIni slog smacker)
 
 macro(copy_dir_to_ja2_binary_after_build DIR)
