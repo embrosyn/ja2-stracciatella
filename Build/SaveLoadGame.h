@@ -1,6 +1,8 @@
 #ifndef _SAVE_LOAD_GAME_H_
 #define _SAVE_LOAD_GAME_H_
 
+#include <ctime>
+
 #include "GameSettings.h"
 #include "ScreenIDs.h"
 

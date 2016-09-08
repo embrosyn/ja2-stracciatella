@@ -134,7 +134,16 @@ static ScreenID guiSaveLoadExitScreen = SAVE_LOAD_SCREEN;
 
 
 //Contains the array of valid save game locations
-static BOOLEAN gbSaveGameArray[NUM_SAVE_GAMES];
+static BOOLEAN* gbSaveGameArray = NULL;
+// save game paths list
+std::vector<std::string> saveGames = std::vector<std::string>();
+// gbSaveGameArray size (due to INT16, up to 32767)
+INT16 sNumSaveGames = -1;
+// show scroll down text flag (until proper pagination happens)
+static BOOLEAN gfDrawScrollMsg = FALSE;
+// starting and ending indices for MPSLSM
+INT16 sSaveBeginIndex = 0, 
+	  sSaveEndIndex = NUM_SAVE_GAMES - 1;
 
 static BOOLEAN gfDoingQuickLoad = FALSE;
 
@@ -366,12 +375,14 @@ static void EnterSaveLoadScreen()
 	InitSaveGameArray();
 	EmptyBackgroundRects();
 
+	gfDrawScrollMsg = sNumSaveGames > sSaveEndIndex + 1;
+
 	// If the user has asked to load the selected save
 	if (gfLoadGameUponEntry)
 	{
 		// Make sure the save is valid
 		INT8 const last_slot = gGameSettings.bLastSavedGameSlot;
-		if (last_slot != -1 && gbSaveGameArray[last_slot])
+		if (last_slot != -1 && gbSaveGameArray[sSaveBeginIndex + last_slot])
 		{
 			gbSelectedSaveLocation = last_slot;
 			StartFadeOutForSaveLoadScreen();
@@ -415,8 +426,30 @@ static void EnterSaveLoadScreen()
 		MSYS_SetRegionUserData(&r, 0, i);
 
 		// We cannot load a game that has not been saved
-		if (!gfSaveGame && !gbSaveGameArray[i]) r.Disable();
+		if (!gfSaveGame)
+		{
+			if (gbSaveGameArray[i + sSaveBeginIndex]) r.Enable();
+			else r.Disable();
+		}
+		else
+		{
+			// disable first (zeroth) slot only if on the first page
+			// as there is only one quicksave slot
+			if (gbSaveGameArray[i + sSaveBeginIndex]) r.Enable();
 
+			// make the next empty slot clickable
+			// going all the way to the last slot
+			else if (i > 0)
+			{
+				// looking at the previous slot
+				if (gbSaveGameArray[i - 1 + sSaveBeginIndex])
+					r.Enable();
+				else
+					r.Disable();
+			}
+
+			else r.Disable();
+		}
 		y += SLG_GAP_BETWEEN_LOCATIONS;
 	}
 
@@ -433,11 +466,11 @@ static void EnterSaveLoadScreen()
 	// If the last saved game slot is ok, set the selected slot to the last saved slot
 	INT8 const last_slot = gGameSettings.bLastSavedGameSlot;
 	if (last_slot != -1            &&
-			gbSaveGameArray[last_slot] &&
+			gbSaveGameArray[last_slot + sSaveBeginIndex] &&
 			(!gfSaveGame || last_slot != 0)) // If it is not the quicksave slot, and we are loading
 	{
 		SAVED_GAME_HEADER SaveGameHeader;
-		if (LoadSavedGameHeader(last_slot, &SaveGameHeader))
+		if (LoadSavedGameHeader(last_slot + sSaveBeginIndex, &SaveGameHeader))
 		{
 			wcscpy(gzGameDescTextField, SaveGameHeader.sSavedGameDesc);
 			gbSelectedSaveLocation = last_slot;
@@ -564,6 +597,10 @@ static void DisplayOnScreenNumber(BOOLEAN display);
 static BOOLEAN DisplaySaveGameEntry(INT8 bEntryID);
 static void MoveSelectionDown();
 static void MoveSelectionUp();
+// TODO: #embrosyn: use custom enum instead? VS lags due to SDLKey usage...
+static void GetPrevPage(SDLKey Key = SDLK_PAGEUP);
+static void GetNextPage(SDLKey Key = SDLK_PAGEDOWN);
+static void GetPrevNextPageFlush(SDLKey Key);
 static void SetSelection(UINT8 ubNewSelection);
 
 
@@ -638,6 +675,9 @@ static void GetSaveLoadScreenUserInput(void)
 				case SDLK_UP:   MoveSelectionUp();   break;
 				case SDLK_DOWN: MoveSelectionDown(); break;
 
+				case SDLK_PAGEUP: GetPrevPage(); break;
+				case SDLK_PAGEDOWN: GetNextPage(); break;
+
 				case SDLK_ESCAPE:
 					if (gbSelectedSaveLocation == -1)
 					{
@@ -694,10 +734,10 @@ static void SaveLoadGameNumber()
 		GetGameDescription();
 
 		// If there is save game in the slot, ask for confirmation before overwriting
-		if (gbSaveGameArray[save_slot_id])
+		if (gbSaveGameArray[save_slot_id + sSaveBeginIndex])
 		{
 			wchar_t sText[512];
-			swprintf(sText, lengthof(sText), zSaveLoadText[SLG_CONFIRM_SAVE], save_slot_id);
+			swprintf(sText, lengthof(sText), zSaveLoadText[SLG_CONFIRM_SAVE], save_slot_id + sSaveBeginIndex);
 			DoSaveLoadMessageBox(sText, SAVE_LOAD_SCREEN, MSG_BOX_FLAG_YESNO, ConfirmSavedGameMessageBoxCallBack);
 		}
 		else
@@ -740,7 +780,33 @@ void DoSaveLoadMessageBox(wchar_t const* const zString, ScreenID const uiExitScr
 
 static void InitSaveGameArray(void)
 {
-	for (INT8 cnt = 0; cnt < NUM_SAVE_GAMES; ++cnt)
+	// TODO: #embrosyn: see below
+	// * ls and count savegames' number							[done]
+	// (done here as InitSaveGameArray() should always be 		[    ]
+	//  called before gbSaveGameArray is read)					[    ]
+	//
+	// ? make it backwards compatible with old ja2 quicksaves	[WIP]
+	//	 -> reserve saveGames[0] for quicksaves (be it old or 	[   ]
+	//		some new naming scheme)								[   ]
+
+	// FindAllFilesInDir(); 
+
+	// list of all saved games
+	saveGames = FindFilesInDir(GCM->getSavedGamesFolder(), ".sav", false, false);
+
+	// number of saved games (up to 32767, due to INT16)
+	sNumSaveGames = saveGames.size();
+
+	// TODO: #embrosyn: less math and casts here please
+	INT16 saveArraySize = ceil((float)sNumSaveGames / (float)NUM_SAVE_GAMES) * NUM_SAVE_GAMES;
+
+	// allocate save game array
+	gbSaveGameArray = MALLOCN(BOOLEAN, saveArraySize);
+
+	// wipe save game array with zeros - we don't want junk here
+	memset(gbSaveGameArray, 0, saveArraySize);
+
+	for (INT16 cnt = 0; cnt < sNumSaveGames; ++cnt)
 	{
 		SAVED_GAME_HEADER SaveGameHeader;
 		gbSaveGameArray[cnt] = LoadSavedGameHeader(cnt, &SaveGameHeader);
@@ -750,7 +816,7 @@ static void InitSaveGameArray(void)
 
 static void DisplaySaveGameList(void)
 {
-	for (INT8 i = 0; i != NUM_SAVE_GAMES; ++i)
+	for (INT8 i = 0; i != NUM_SAVE_GAMES; i++)
 	{ // Display all the information from the header
 		DisplaySaveGameEntry(i);
 	}
@@ -769,7 +835,9 @@ static BOOLEAN DisplaySaveGameEntry(INT8 const entry_idx)
 	UINT16 const by = SLG_FIRST_SAVED_SPOT_Y + SLG_GAP_BETWEEN_LOCATIONS * entry_idx;
 
 	bool const is_selected = entry_idx == gbSelectedSaveLocation;
-	bool const save_exists = gbSaveGameArray[entry_idx];
+	bool const save_exists = gbSaveGameArray[sSaveBeginIndex + entry_idx];
+	bool const prev_save_exists = entry_idx > 0 ? 
+		gbSaveGameArray[sSaveBeginIndex + entry_idx - 1] : FALSE;
 
 	// Background
 	UINT16 const gfx = is_selected ?
@@ -779,7 +847,7 @@ static BOOLEAN DisplaySaveGameEntry(INT8 const entry_idx)
 	SGPFont  font = SAVE_LOAD_NORMAL_FONT;
 	UINT8 foreground;
 	UINT8 shadow;
-	if (entry_idx == 0 && gfSaveGame)
+	if (entry_idx == 0 && gfSaveGame && sSaveBeginIndex == 0)
 	{ // The QuickSave slot
 		FRAME_BUFFER->ShadowRect(bx, by, bx + SLG_SAVELOCATION_WIDTH, by + SLG_SAVELOCATION_HEIGHT);
 		foreground = SAVE_LOAD_QUICKSAVE_COLOR;
@@ -800,7 +868,7 @@ static BOOLEAN DisplaySaveGameEntry(INT8 const entry_idx)
 		foreground = SAVE_LOAD_NORMAL_COLOR;
 		shadow     = SAVE_LOAD_NORMAL_SHADOW_COLOR;
 	}
-	else if (gfSaveGame)
+	else if (gfSaveGame && prev_save_exists)
 	{ // We are saving a game
 		foreground = SAVE_LOAD_EMPTYSLOT_COLOR;
 		shadow     = SAVE_LOAD_EMPTYSLOT_SHADOW_COLOR;
@@ -827,7 +895,7 @@ static BOOLEAN DisplaySaveGameEntry(INT8 const entry_idx)
 			header.iCurrentBalance           = LaptopSaveInfo.iCurrentBalance;
 			header.sInitialGameOptions       = gGameOptions;
 		}
-		else if (!LoadSavedGameHeader(entry_idx, &header))
+		else if (!LoadSavedGameHeader(entry_idx + sSaveBeginIndex, &header))
 		{
 			return FALSE;
 		}
@@ -916,6 +984,16 @@ static BOOLEAN DisplaySaveGameEntry(INT8 const entry_idx)
 		DrawTextToScreen(txt, bx, by + SLG_DATE_OFFSET_Y, 609, font, foreground, FONT_MCOLOR_BLACK, CENTER_JUSTIFIED);
 	}
 
+	// draw scroll message code - placeholder until the real thing comes
+	if (gfDrawScrollMsg) 
+	{
+		wchar_t const* const scrollMsg = L"Scroll down [SDLK_PAGEDOWN]!";
+		UINT16 pos_x = SLG_LOAD_CANCEL_POS_X + 210,
+			   pos_y = SLG_BTN_POS_Y + 10;
+		SetFontShadow(SAVE_LOAD_QUICKSAVE_SHADOW_COLOR);
+		DrawTextToScreen(scrollMsg, pos_x, pos_y, 100, SAVE_LOAD_NORMAL_FONT, FONT_MCOLOR_WHITE, SAVE_LOAD_EMPTYSLOT_COLOR, LEFT_JUSTIFIED);
+	}
+
 	// Reset the shadow color
 	SetFontShadow(DEFAULT_SHADOW);
 
@@ -924,7 +1002,8 @@ static BOOLEAN DisplaySaveGameEntry(INT8 const entry_idx)
 }
 
 
-static BOOLEAN LoadSavedGameHeader(const INT8 bEntry, SAVED_GAME_HEADER* const header)
+// original LoadSavedGameHeader() function kept below for reference, renamed to avoid calls
+static BOOLEAN LoadSavedGameGHeader(const INT8 bEntry, SAVED_GAME_HEADER* const header)
 {
 	// make sure the entry is valid
 	if (0 <= bEntry && bEntry < NUM_SAVE_GAMES)
@@ -949,6 +1028,37 @@ static BOOLEAN LoadSavedGameHeader(const INT8 bEntry, SAVED_GAME_HEADER* const h
 	return FALSE;
 }
 
+
+static BOOLEAN LoadSavedGameHeader(const INT8 bEntry, SAVED_GAME_HEADER* const header)
+{
+	// make sure the entry is valid
+	if (0 <= bEntry && bEntry < sNumSaveGames)
+	{
+		// TODO: #embrosyn: improve code quality as much as possible, plus see notes below
+		// ? if it doesn't throw unexpected exceptions anymore, move it out of the try block
+		// ? use s(w)printf instead of casting
+		
+		//CreateSavedGameFileNameFromNumber(bEntry, zSavedGameName);
+
+		try
+		{
+			// TODO: #embrosyn: check if this can fail too?
+			char* zSavedGameName = (char*)saveGames[bEntry].c_str();
+
+			bool stracLinuxFormat;
+			AutoSGPFile f(GCM->openUserPrivateFileForReading(zSavedGameName));
+			ExtractSavedGameHeaderFromFile(f, *header, &stracLinuxFormat);
+			endof(header->zGameVersionNumber)[-1] = '\0';
+			endof(header->sSavedGameDesc)[-1] = L'\0';
+			return TRUE;
+		}
+		catch (...) { /* Handled below */ }
+
+		gbSaveGameArray[bEntry] = FALSE;
+	}
+	memset(header, 0, sizeof(*header));
+	return FALSE;
+}
 
 static void BtnSlgCancelCallback(GUI_BUTTON* const btn, INT32 const reason)
 {
@@ -994,7 +1104,8 @@ static void SelectedSaveRegionCallBack(MOUSE_REGION* pRegion, INT32 iReason)
 */
 
 		//If we are saving and this is the quick save slot
-		if( gfSaveGame && bSelected == 0 )
+		// ... and we are on the first page
+		if( gfSaveGame && bSelected == 0 && sSaveBeginIndex == 0 )
 		{
 			//Display a pop up telling user what the quick save slot is
 			DoSaveLoadMessageBox(pMessageStrings[MSG_QUICK_SAVE_RESERVED_FOR_TACTICAL], SAVE_LOAD_SCREEN, MSG_BOX_FLAG_OK, RedrawSaveLoadScreenAfterMessageBox);
@@ -1151,14 +1262,14 @@ static void InitSaveLoadScreenTextInputBoxes(void)
 	AddUserInputField(NULL);
 
 	// If we are modifying a previously modifed string, use it
-	if (!gbSaveGameArray[gbSelectedSaveLocation])
+	if (!gbSaveGameArray[gbSelectedSaveLocation + sSaveBeginIndex])
 	{
 		gzGameDescTextField[0] = '\0';
 	}
 	else if (gzGameDescTextField[0] == '\0')
 	{
 		SAVED_GAME_HEADER SaveGameHeader;
-		LoadSavedGameHeader(gbSelectedSaveLocation, &SaveGameHeader);
+		LoadSavedGameHeader(gbSelectedSaveLocation + sSaveBeginIndex, &SaveGameHeader);
 		wcscpy(gzGameDescTextField, SaveGameHeader.sSavedGameDesc);
 	}
 
@@ -1183,7 +1294,7 @@ static void DestroySaveLoadTextInputBoxes(void)
 static void SetSelection(UINT8 const new_selection)
 {
 	// If we are loading and there is no entry, return
- 	if (!gfSaveGame && !gbSaveGameArray[new_selection]) return;
+ 	if (!gfSaveGame && !gbSaveGameArray[new_selection + sSaveBeginIndex]) return;
 
 	gfRedrawSaveLoadScreen = TRUE;
 	DestroySaveLoadTextInputBoxes();
@@ -1213,7 +1324,7 @@ static UINT8 CompareSaveGameVersion(INT8 bSaveGameID)
 	SAVED_GAME_HEADER SaveGameHeader;
 
 	//Get the heade for the saved game
-	LoadSavedGameHeader( bSaveGameID, &SaveGameHeader );
+	LoadSavedGameHeader( bSaveGameID + sSaveBeginIndex, &SaveGameHeader );
 
 	// check to see if the saved game version in the header is the same as the current version
 	if( SaveGameHeader.uiSavedGameVersion != guiSavedGameVersion )
@@ -1498,10 +1609,12 @@ void DoQuickLoad()
 
 bool AreThereAnySavedGameFiles()
 {
-	for (INT8 i = 0; i != NUM_SAVE_GAMES; ++i)
+	InitSaveGameArray();
+
+	for (INT16 i = 0; i != sNumSaveGames; ++i)
 	{
-		char filename[512];
-		CreateSavedGameFileNameFromNumber(i, filename);
+		// TODO: #embrosyn: use s(w)printf instead of casting
+		char* filename = (char*)saveGames[i].c_str();
 		if (GCM->doesGameResExists(filename)) return true;
 	}
 	return false;
@@ -1525,17 +1638,24 @@ static void MoveSelectionDown()
 		}
 		else if (slot < NUM_SAVE_GAMES - 1)
 		{
-			SetSelection(slot + 1);
+			// move selection down if there is a save in the next slot (slot + 1, overwriting an old save)
+			// or if the save existed in the current slot (creating a new save)
+			if (gbSaveGameArray[slot + 1 + sSaveBeginIndex] || gbSaveGameArray[slot + sSaveBeginIndex])
+				SetSelection(slot + 1);
 		}
+		else if (slot == 10)
+		{
+			GetNextPage(SDLK_DOWN);
+		}
+
 	}
 	else
 	{
-		for (INT32 i = slot != -1 ? slot + 1 : 0; i != NUM_SAVE_GAMES; ++i)
-		{
-			if (!gbSaveGameArray[i]) continue;
+		INT32 i = slot != -1 ? slot + 1 : 0;
+		if (i >= NUM_SAVE_GAMES)
+			GetNextPage(SDLK_DOWN);
+		else if (gbSaveGameArray[i + sSaveBeginIndex])
 			SetSelection(i);
-			break;
-		}
 	}
 }
 
@@ -1553,16 +1673,188 @@ static void MoveSelectionUp()
 		{
 			SetSelection(slot - 1);
 		}
+		else if (sSaveBeginIndex > 0)
+		{
+			if (slot > 0)
+				SetSelection(slot - 1);
+			else if (slot == 0)
+				GetPrevPage(SDLK_UP);
+		}
 	}
 	else
 	{
-		for (INT32 i = slot != -1 ? slot - 1 : NUM_SAVE_GAMES - 1; i >= 0; --i)
-		{
-			if (!gbSaveGameArray[i]) continue;
+		INT32 i = slot != -1 ? slot - 1 : NUM_SAVE_GAMES - 1;
+		if (i < 0)
+			GetPrevPage(SDLK_UP);
+		else if (gbSaveGameArray[i + sSaveBeginIndex])
 			SetSelection(i);
-			break;
+	}
+}
+
+
+static void GetPrevPage(SDLKey Key /* = SDLK_PAGEUP */)
+{
+	if (sSaveBeginIndex - NUM_SAVE_GAMES >= 0)
+	{
+		sSaveBeginIndex -= NUM_SAVE_GAMES;
+		sSaveEndIndex -= NUM_SAVE_GAMES;
+
+		GetPrevNextPageFlush(Key);
+	}
+	else if (gbSelectedSaveLocation != 0 && gbSaveGameArray[0] && !gfSaveGame)
+		SetSelection(0);
+	else if (gbSelectedSaveLocation != 1 && gbSaveGameArray[1] && gfSaveGame)
+		SetSelection(1);
+}
+
+static void GetNextPage(SDLKey Key /* = SDLK_PAGEDOWN */)
+{
+	if (sSaveEndIndex < sNumSaveGames)
+	{
+		sSaveBeginIndex += NUM_SAVE_GAMES;
+		sSaveEndIndex += NUM_SAVE_GAMES;
+
+		GetPrevNextPageFlush(Key);
+	}
+	else 
+	{
+		INT16 last_slot;
+
+		for (last_slot = NUM_SAVE_GAMES - 1; !gbSaveGameArray[last_slot + sSaveBeginIndex]; last_slot--);
+		
+		if (!gfSaveGame)
+		{
+			if (last_slot != gbSelectedSaveLocation)
+				SetSelection(last_slot);
+		}
+		else
+		{
+			if (last_slot < NUM_SAVE_GAMES - 1)
+			{
+				// don't set the next empty slot if it was already set
+				if (last_slot + 1 != gbSelectedSaveLocation)
+					SetSelection(last_slot + 1);
+			}
 		}
 	}
+}
+
+
+static void GetPrevNextPageFlush(SDLKey Key)
+{
+	// draw a scroll down message if conditions are met
+	gfDrawScrollMsg = sNumSaveGames > sSaveEndIndex + 1;
+
+	// disable regions which are no longer hoverable
+	UINT16 const x = SLG_FIRST_SAVED_SPOT_X;
+	UINT16       y = SLG_FIRST_SAVED_SPOT_Y;
+
+	for (INT16 i = 0; i != NUM_SAVE_GAMES; ++i)
+	{
+		MOUSE_REGION& r = gSelectedSaveRegion[i];
+
+		// We cannot load a game that has not been saved
+		if (!gfSaveGame) 
+		{ 
+			if (gbSaveGameArray[i + sSaveBeginIndex]) r.Enable(); 
+			else r.Disable();
+		}
+		else
+		{
+			// disable first (zeroth) slot only if on the first page
+			// as there is only one quicksave slot
+			if (gbSaveGameArray[i + sSaveBeginIndex]) r.Enable();
+			
+			// make the next empty slot clickable
+			// going all the way to the last slot
+			else if (i > 0)
+			{
+				// looking at the previous slot
+				if (gbSaveGameArray[i - 1 + sSaveBeginIndex])
+					r.Enable();
+				else
+					r.Disable();
+			}
+
+			else r.Disable();
+		}
+		y += SLG_GAP_BETWEEN_LOCATIONS;
+	}
+	
+
+	// we've come to a new page, let's check if current save slot is highlightable
+	if (!gbSaveGameArray[gbHighLightedLocation + sSaveBeginIndex])
+		gbHighLightedLocation = -1;
+
+
+	// the selection might also need some shifting
+	if (Key == SDLK_UP)
+		SetSelection(NUM_SAVE_GAMES - 1);
+	else if (Key == SDLK_DOWN)
+		SetSelection(0);
+	else if (!gbSaveGameArray[gbSelectedSaveLocation + sSaveBeginIndex])
+	{
+		// TODO: #embrosyn: copypaste from GetNextPage(), else block, refactor in a separate function?
+		
+		INT16 last_slot;
+
+		for (last_slot = NUM_SAVE_GAMES - 1; 
+			 !gbSaveGameArray[last_slot + sSaveBeginIndex] && last_slot != -1; 
+			 last_slot--);
+
+		if (!gfSaveGame)
+		{
+			if (last_slot != gbSelectedSaveLocation)
+				SetSelection(last_slot);
+		}
+		else
+		{
+			if (last_slot < NUM_SAVE_GAMES - 1)
+			{
+				// don't set the next empty slot if it was already set
+				if (last_slot + 1 != gbSelectedSaveLocation)
+					SetSelection(last_slot + 1);
+				else
+				{
+					// TODO: #embrosyn: ack, more duplication...
+					DestroySaveLoadTextInputBoxes();
+
+					// Null out the current description
+					gzGameDescTextField[0] = '\0';
+
+					//Init the text field for the game desc
+					InitSaveLoadScreenTextInputBoxes();
+				}
+			}
+		}
+	}
+	else if (gfSaveGame)
+	{
+		// if on the first page, the quick save slot should not be selectable from the save screen
+		if (sSaveBeginIndex == 0 && gbSelectedSaveLocation == 0)
+		{
+			if (gbSaveGameArray[1])
+			{
+				SetSelection(1);
+			}
+		}
+		else
+		{	
+			// TODO: #embrosyn: dedupe code?
+			// nevermind, reload the text field anyway
+			DestroySaveLoadTextInputBoxes();
+
+			// Null out the current description
+			gzGameDescTextField[0] = '\0';
+
+			//Init the text field for the game desc
+			InitSaveLoadScreenTextInputBoxes();
+		}
+	}
+
+	RenderSaveLoadScreen();
+	MarkButtonsDirty();
+	RenderButtons();
 }
 
 

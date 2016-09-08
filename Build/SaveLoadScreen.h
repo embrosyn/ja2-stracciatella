@@ -1,6 +1,9 @@
 #ifndef _SAVE_LOAD_SCREEN__H_
 #define _SAVE_LOAD_SCREEN__H_
 
+#include <string>
+#include <vector>
+
 #include "JA2Types.h"
 #include "MessageBoxScreen.h"
 #include "ScreenIDs.h"
@@ -8,6 +11,10 @@
 
 #define		NUM_SAVE_GAMES											11
 
+extern std::vector<std::string> saveGames;
+extern INT16 sNumSaveGames,
+			 sSaveBeginIndex, 
+			 sSaveEndIndex;
 
 //This flag is used to diferentiate between loading a game and saveing a game.
 // gfSaveGame=TRUE		For saving a game

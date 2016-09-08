@@ -110,8 +110,8 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
-static const char g_quicksave_name[] = "QuickSave";
-static const char g_savegame_name[]  = "SaveGame";
+static const char g_quicksave_name[] = "ja2_quicksave";
+static const char g_savegame_name[]  = "ja2_save_";
 static const char g_savegame_ext[]   = "sav";
 
 //Global variable used
@@ -1691,6 +1691,7 @@ static void LoadWatchedLocsFromSavedGame(HWFILE const hFile)
 }
 
 
+/*
 void CreateSavedGameFileNameFromNumber(const UINT8 ubSaveGameID, char* const pzNewFileName)
 {
   std::string dir = GCM->getSavedGamesFolder();
@@ -1729,7 +1730,22 @@ void CreateSavedGameFileNameFromNumber(const UINT8 ubSaveGameID, char* const pzN
 			break;
 	}
 }
+*/
 
+void CreateSavedGameFileNameFromNumber(const UINT8 ubSaveGameID, char* const pzNewFileName) 
+{
+	if (ubSaveGameID + sSaveBeginIndex > sNumSaveGames - 1) {
+		char buffer[80];
+		time_t cur_raw_time;
+		time(&cur_raw_time);
+		strftime(buffer, 80, "%Y_%m_%d-%H_%M_%S", localtime(&cur_raw_time));
+		std::string newFileName = GCM->getSavedGamesFolder() + "\\" + g_savegame_name + buffer + ".sav";
+		sprintf(pzNewFileName, "%s", newFileName.c_str());
+	}
+	else
+		sprintf(pzNewFileName, "%s", saveGames[ubSaveGameID + sSaveBeginIndex].c_str());
+	
+}
 
 void SaveMercPath(HWFILE const f, PathSt const* const head)
 {
