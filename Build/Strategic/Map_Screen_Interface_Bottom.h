@@ -6,6 +6,7 @@
 
 
 #define MAX_MESSAGES_ON_MAP_BOTTOM  9
+#define MESSAGE_BTN_SCROLL_TIME 100
 
 
 enum ExitToWhere
@@ -44,6 +45,7 @@ void DeleteMapBottomGraphics( void );
 
 // load bottom graphics
 void HandleLoadOfMapBottomGraphics( void );
+GUIButtonRef MakeArrowButton( const INT32 grayed, const INT32 off, const INT32 on, const INT16 x, const INT16 y, const GUI_CALLBACK click, const wchar_t* const help );
 
 // allowed to time compress?
 BOOLEAN AllowedToTimeCompress( void );

@@ -110,8 +110,8 @@
 #include "ContentManager.h"
 #include "GameInstance.h"
 
-static const char g_quicksave_name[] = "ja2_quicksave";
-static const char g_savegame_name[]  = "ja2_save_";
+static const char g_quicksave_name[] = "QuickSave";
+static const char g_savegame_name[]  = "SaveGame_";
 static const char g_savegame_ext[]   = "sav";
 
 //Global variable used
@@ -204,7 +204,7 @@ static void SaveGameFilePosition(UINT8 slot, const HWFILE save, const char* pMsg
 #endif
 
 
-BOOLEAN SaveGame(UINT8 const ubSaveGameID, wchar_t const* GameDesc)
+BOOLEAN SaveGame(INT8 const ubSaveGameID, wchar_t const* GameDesc)
 {
 	BOOLEAN	fPausedStateBeforeSaving    = gfGamePaused;
 	BOOLEAN	fLockPauseStateBeforeSaving = gfLockPauseState;
@@ -264,7 +264,7 @@ BOOLEAN SaveGame(UINT8 const ubSaveGameID, wchar_t const* GameDesc)
 		memset(&header, 0, sizeof(header));
 
 		wchar_t (& desc)[lengthof(header.sSavedGameDesc)] = header.sSavedGameDesc;
-		if (ubSaveGameID == 0)
+		if (ubSaveGameID == -1)
 		{ // We are saving the quick save
 #ifdef JA2BETAVERSION
 			// Increment the quicksave counter
@@ -1691,61 +1691,42 @@ static void LoadWatchedLocsFromSavedGame(HWFILE const hFile)
 }
 
 
-/*
-void CreateSavedGameFileNameFromNumber(const UINT8 ubSaveGameID, char* const pzNewFileName)
+void CreateSavedGameFileNameFromNumber(const INT8 ubSaveGameID, char* const pzNewFileName) 
 {
-  std::string dir = GCM->getSavedGamesFolder();
+	std::string dir = GCM->getSavedGamesFolder();
 	char const* const ext = g_savegame_ext;
 
-	switch (ubSaveGameID)
+	// TODO: #embrosyn: autosaves and error saves implemented as-is for now, do more research and improve if possible
+	if (ubSaveGameID == SAVE__END_TURN_NUM)
 	{
-		case 0: // we are creating the QuickSave file
-		{
-			char const* const quick = g_quicksave_name;
-#ifdef JA2BETAVERSION
-			if (gfUseConsecutiveQuickSaveSlots &&
-					guiCurrentQuickSaveNumber != 0)
-			{
-				sprintf(pzNewFileName, "%s/%s%02d.%s", dir.c_str(), quick, guiCurrentQuickSaveNumber, ext);
-			}
-			else
-#endif
-			{
-				sprintf(pzNewFileName, "%s/%s.%s", dir.c_str(), quick, ext);
-			}
-			break;
-		}
-
-		case SAVE__END_TURN_NUM:
-			sprintf(pzNewFileName, "%s/Auto%02d.%s", dir.c_str(), guiLastSaveGameNum, ext);
-			guiLastSaveGameNum = (guiLastSaveGameNum + 1) % 2;
-			break;
-
-		case SAVE__ERROR_NUM:
-			sprintf(pzNewFileName, "%s/error.%s", dir.c_str(), ext);
-			break;
-
-		default:
-			sprintf(pzNewFileName, "%s/%s%02d.%s", dir.c_str(), g_savegame_name, ubSaveGameID, ext);
-			break;
+		sprintf(pzNewFileName, "%s/Auto%02d.%s", dir.c_str(), guiLastSaveGameNum, ext);
+		guiLastSaveGameNum = (guiLastSaveGameNum + 1) % 2;
 	}
-}
-*/
-
-void CreateSavedGameFileNameFromNumber(const UINT8 ubSaveGameID, char* const pzNewFileName) 
-{
-	if (ubSaveGameID + sSaveBeginIndex > sNumSaveGames - 1) {
+	else if (ubSaveGameID == SAVE__ERROR_NUM)
+	{
+		sprintf(pzNewFileName, "%s/error.%s", dir.c_str(), ext);
+	}
+	else if (ubSaveGameID == -1)
+	{	// quicksave might not even exist, so hardcoding file name instead of fetching from saveGames
+		std::string fileName = dir + '\\' + g_quicksave_name + '.' + ext;
+		sprintf(pzNewFileName, "%s", fileName.c_str());
+	}
+	else if (ubSaveGameID + sSaveBeginIndex < sNumSaveGames)
+	{
+		std::string fileName = dir + '\\' + saveGames[ubSaveGameID + sSaveBeginIndex];
+		sprintf(pzNewFileName, "%s", fileName.c_str());
+	}
+	else
+	{	// creating a new save game file
 		char buffer[80];
 		time_t cur_raw_time;
 		time(&cur_raw_time);
 		strftime(buffer, 80, "%Y_%m_%d-%H_%M_%S", localtime(&cur_raw_time));
-		std::string newFileName = GCM->getSavedGamesFolder() + "\\" + g_savegame_name + buffer + ".sav";
-		sprintf(pzNewFileName, "%s", newFileName.c_str());
+		std::string fileName = dir + "\\" + g_savegame_name + buffer + '.' + ext;
+		sprintf(pzNewFileName, "%s", fileName.c_str());
 	}
-	else
-		sprintf(pzNewFileName, "%s", saveGames[ubSaveGameID + sSaveBeginIndex].c_str());
-	
 }
+
 
 void SaveMercPath(HWFILE const f, PathSt const* const head)
 {

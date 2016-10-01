@@ -14,8 +14,8 @@
 
 #define		GAME_VERSION_LENGTH						16
 
-#define		SAVE__ERROR_NUM						99
-#define		SAVE__END_TURN_NUM				98
+#define		SAVE__ERROR_NUM						-2
+#define		SAVE__END_TURN_NUM				-3
 
 #define SAVED_GAME_HEADER_ON_DISK_SIZE            (432) /** Size of SAVED_GAME_HEADER on disk in Vanilla and Stracciatella Windows  */
 #define SAVED_GAME_HEADER_ON_DISK_SIZE_STRAC_LIN  (688) /** Size of SAVED_GAME_HEADER on disk in Stracciatella Linux */
@@ -72,10 +72,10 @@ void ExtractSavedGameHeaderFromFile(HWFILE, SAVED_GAME_HEADER&, bool *stracLinux
 
 extern ScreenID guiScreenToGotoAfterLoadingSavedGame;
 
-void CreateSavedGameFileNameFromNumber(UINT8 ubSaveGameID, char* pzNewFileName);
+void CreateSavedGameFileNameFromNumber(INT8 ubSaveGameID, char* pzNewFileName);
 
 
-BOOLEAN SaveGame( UINT8 ubSaveGameID, const wchar_t *pGameDesc );
+BOOLEAN SaveGame( INT8 ubSaveGameID, const wchar_t *pGameDesc );
 void    LoadSavedGame(UINT8 save_slot_id);
 
 void SaveFilesToSavedGame(char const* pSrcFileName, HWFILE);

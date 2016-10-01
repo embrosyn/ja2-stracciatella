@@ -11,6 +11,7 @@
 
 #define		NUM_SAVE_GAMES											11
 
+
 extern std::vector<std::string> saveGames;
 extern INT16 sNumSaveGames,
 			 sSaveBeginIndex, 

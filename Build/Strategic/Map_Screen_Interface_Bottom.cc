@@ -72,8 +72,6 @@
 
 
 
-#define MESSAGE_BTN_SCROLL_TIME 100
-
 // delay for paused flash
 #define PAUSE_GAME_TIMER 500
 
@@ -281,7 +279,7 @@ static GUIButtonRef MakeExitButton(const INT32 off, const INT32 on, const INT16 
 }
 
 
-static GUIButtonRef MakeArrowButton(const INT32 grayed, const INT32 off, const INT32 on, const INT16 x, const INT16 y, const GUI_CALLBACK click, const wchar_t* const help)
+GUIButtonRef MakeArrowButton(const INT32 grayed, const INT32 off, const INT32 on, const INT16 x, const INT16 y, const GUI_CALLBACK click, const wchar_t* const help)
 {
 	GUIButtonRef const btn = QuickCreateButtonImg(INTERFACEDIR "/map_screen_bottom_arrows.sti", grayed, off, -1, on, -1, x, y, MSYS_PRIORITY_HIGHEST - 2, click);
 	btn->SetFastHelpText(help);
